@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Lahza Payment Gateway Core Class
+ * 
+ * @author Khalil Khasseb <khalil.khasseb@proton.me>
+ */
 namespace Lahza\PaymentGateway;
 
 use Illuminate\Http\Client\PendingRequest;

@@ -1,6 +1,15 @@
 {
     "name": "lahza/payment-gateway",
-    "description": "Laravel package for Lahza payment gateway integration",
+    "description": "A robust Laravel payment gateway package developed by Palestinian developer Khalil Khasseb",
+    "authors": [
+        {
+            "name": "Khalil Khasseb",
+            "email": "khalil.khasseb@proton.me",
+            "homepage": "https://github.com/khalilkhasseb",
+            "role": "Developer",
+            "location": "Palestine - Aroura"
+        }
+    ],
     "type": "library",
     "license": "MIT",
     "autoload": {

@@ -6,6 +6,13 @@
 
 A Laravel package for seamless integration with the Lahza Payment Gateway. Process payments, handle webhooks, and manage transactions with ease.
 
+## Author
+
+**Khalil Khasseb**  
+📍 Palestine - Aroura  
+✉️ [khalil.khasseb@proton.me](mailto:khalil.khasseb@proton.me)  
+💻 [GitHub Profile](https://github.com/khalilkhasseb)
+
 ## Features
 
 - 💳 Create payment intents
@@ -175,7 +182,10 @@ Full API documentation available at [Lahza API Docs](https://api-docs.lahza.io)
 
 ## Security
 
-If you discover any security issues, please email security@yourdomain.com instead of using the issue tracker.
+If you discover any security issues, please email:  
+🔒 [khalil.khasseb@proton.me](mailto:khalil.khasseb@proton.me)  
+instead of using the issue tracker.
+
 
 ## License
 

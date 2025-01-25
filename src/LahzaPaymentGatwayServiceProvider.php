@@ -1,4 +1,9 @@
 <?php
+/**
+ * Lahza Payment Gateway Service Provider
+ * 
+ * @author Khalil Khasseb <khalil.khasseb@proton.me>
+ */
 
 namespace Lahza\PaymentGateway;
 
