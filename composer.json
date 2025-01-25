@@ -1,0 +1,33 @@
+{
+    "name": "lahza/payment-gateway",
+    "description": "Laravel package for Lahza payment gateway integration",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Lahza\\PaymentGateway\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Lahza\\PaymentGateway\\LahzaPaymentGatwayServiceProvider"
+            ],
+            "aliases": {
+                "Lahza": "Lahza\\PaymentGateway\\Facades\\Lahza"
+            }
+        }
+    },
+    "require": {
+        "php": "^8.0",
+        "guzzlehttp/guzzle": "^7.0",
+        "illuminate/support": "^9.0|^10.0",
+        "ext-json": "*"
+    },
+    "repositories": {
+        "lahza": {
+            "type": "path",
+            "url": "packages/lahza-gateway"
+        }
+    }
+}
