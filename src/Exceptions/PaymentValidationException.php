@@ -11,13 +11,18 @@ class PaymentValidationException extends PaymentException
 
     public function __construct(MessageBag $errors)
     {
-        parent::__construct(
-            'validation_error',  // Error code from ErrorCodes::MAP
-            [
-                'error_count' => $errors->count(),
-                'errors' => $errors->getMessages()
-            ]// Context array
-        );
-        $this->errors = $errors->toArray();
+        $errorMessages = $errors->getMessages();
+        
+        parent::__construct('validation_error', [
+            'count' => count($errorMessages),
+            'fields' => implode(', ', array_keys($errorMessages)),
+            'errors' => $errorMessages 
+        ]);
+        $this->errors = $errors->toArray() ;
+    }
+
+    public function getErrors(): array
+    {
+        return $this->errors;
     }
 }

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Lahza Payment Gateway Service Provider
  * 
@@ -10,7 +11,7 @@ namespace Lahza\PaymentGateway;
 use Illuminate\Support\ServiceProvider;
 use Lahza\PaymentGateway\LahzaGateway;
 
-class LahzaPaymentGatwayServiceProvider extends ServiceProvider
+class LahzaPaymentGatewayServiceProvider extends ServiceProvider
 {
     public function register()
     {
@@ -36,6 +37,13 @@ class LahzaPaymentGatwayServiceProvider extends ServiceProvider
                     ->render($params['exception']);
             }
         );
+        if (config('lahza.webhook.enabled')) {
+            $this->loadRoutesFrom(__DIR__ . '/../routes/webhooks.php');
+            $this->app['router']->aliasMiddleware(
+                'lahza.webhook',
+                \Lahza\PaymentGateway\Http\Middleware\VerifyLahzaWebhook::class
+            );
+        }
     }
 
     public function boot()

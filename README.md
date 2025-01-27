@@ -13,6 +13,19 @@ A Laravel package for seamless integration with the Lahza Payment Gateway. Proce
 ✉️ [khalil.khasseb@proton.me](mailto:khalil.khasseb@proton.me)  
 💻 [GitHub Profile](https://github.com/khalilkhasseb)
 
+## Features (Updated)
+- 💰 Automatic currency conversion (USD/ILS/JOD)
+- 🔒 Conditional webhook handling
+- 🧩 Data Transfer Objects (DTOs) for API responses
+- 🚦 Improved validation error messages
+
+## Configuration (Updated)
+Add to your `.env`:
+```env
+LAHZA_INLINE_CALLBACK=false
+LAHZA_CALLBACK_URL=
+LAHZA_DEFAULT_CURRENCY=USD
+
 ## Features
 
 - 💳 Create payment intents
@@ -22,6 +35,7 @@ A Laravel package for seamless integration with the Lahza Payment Gateway. Proce
 - 🛡️ Robust error handling
 - ⚙️ Configurable settings
 - 🧪 Fake mode for testing
+
 
 ## Installation
 
@@ -67,21 +81,22 @@ LAHZA_CURRENCIES=USD,EUR,GBP
 
 ### Create Payment Intent
 
+
+
+
 ```php
 use Lahza\Facades\Lahza;
 
 try {
-    $payment = Lahza::createPaymentIntent([
-        'amount' => 100.50,
-        'currency' => 'USD',
-        'reference' => 'ORDER-123',
-        'customer' => [
-            'email' => 'customer@example.com',
-            'name' => 'John Doe'
-        ]
-    ]);
-    
-    return redirect()->away($payment->getAuthorizationUrl());
+    use Lahza\Facades\Lahza;
+
+$transaction = Lahza::initializeTransaction([
+    'email' => 'customer@example.com',
+    'amount' => 100.50, // Automatically converted to cents
+    'currency' => 'USD'
+]);
+
+return redirect()->away($transaction->authorizationUrl);
     
 } catch (\Lahza\PaymentGateway\Exceptions\PaymentException $e) {
     // Handle error
@@ -91,8 +106,19 @@ try {
 ### Confirm Payment
 
 ```php
-$confirmedPayment = Lahza::confirmPayment($paymentId);
+$verified = Lahza::verifyTransaction('TXN_12345');
+echo $verified->amount; // Returns decimal value
+
 ```
+### Handle Webhooks
+
+ ```php
+// Get supported currencies
+$currencies = config('lahza.currencies');
+
+// Get default currency
+$default = Lahza::getDefaultCurrency();
+ ```
 
 ### Handle Webhooks
 
@@ -103,18 +129,28 @@ Route::post('/lahza/webhook', function (Request $request) {
     // Handle webhook
 })->middleware('lahza.webhook');
 ```
+Webhook config 
 
+```php
+'webhook' => [
+    'enabled' => true,
+    'secret' => env('LAHZA_WEBHOOK_SECRET'),
+    'middleware' => ['api']
+]
+```
 ### Error Handling
 
 ```php
 try {
-    // Payment operations
+    $transaction = Lahza::initializeTransaction(...);
 } catch (\Lahza\PaymentGateway\Exceptions\PaymentValidationException $e) {
-    // Validation errors
-    $errors = $e->getContext()['errors'];
+    foreach ($e->getErrors() as $field => $messages) {
+        // Handle validation errors
+    }
 } catch (\Lahza\PaymentGateway\Exceptions\PaymentException $e) {
-    // General errors
-    logger()->error($e->getDocumentationUrl(), $e->getContext());
+    logger()->error('Payment failed: ' . $e->getMessage(), [
+        'context' => $e->getContext()
+    ]);
 }
 ```
 
@@ -139,15 +175,16 @@ Enable fake mode:
 ```php
 Lahza::fake();
 
-// Test successful response
+// Mock specific endpoints
 Lahza::fake([
-    'createPaymentIntent' => [
+    '/transaction/initialize' => [
         'status' => true,
         'data' => [
-            'authorization_url' => 'https://checkout.lahza.io/fake'
+            'authorization_url' => 'https://checkout.lahza.io/fake',
+            'reference' => 'TEST_123'
         ]
     ]
-]);
+]);****
 ```
 
 ## TODO: Future Enhancements

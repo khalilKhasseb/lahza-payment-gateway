@@ -1,26 +1,23 @@
 <?php
 
-/**
- * Lahza Payment Gateway Core Class
- * 
- * @author Khalil Khasseb <khalil.khasseb@proton.me>
- */
 namespace Lahza\PaymentGateway;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-
 use Lahza\PaymentGateway\Exceptions\PaymentConnectionException;
 use Lahza\PaymentGateway\Exceptions\PaymentException;
 use Lahza\PaymentGateway\Exceptions\PaymentValidationException;
-use Lahza\PaymentGateway\Exceptions\ErrorCodes;
 use Lahza\PaymentGateway\DataTransferObjects\SuccessResponse;
-class LahzaGateway implements Contracts\LahzaGateway
+use Lahza\PaymentGateway\Contracts\LahzaGateway as PaymentContract;
+use Lahza\PaymentGateway\DataTransferObjects\TransactionResponse;
+use Lahza\PaymentGateway\DataTransferObjects\Transaction;
+
+class LahzaGateway implements PaymentContract
 {
-    protected $http;
-    protected $fake = false;
+    protected PendingRequest $http;
+    protected bool $fake = false;
 
     public function __construct(
         protected string $apiKey,
@@ -33,53 +30,128 @@ class LahzaGateway implements Contracts\LahzaGateway
     }
 
 
-    public function createPaymentIntent(array $data)
+    public function initializeTransaction(array $data): TransactionResponse
     {
-        $this->validate(
-            $data,
-            [
-                'amount' => 'required|numeric|min:0.5',
-                'currency' => 'required|in:' . implode(',', config('lahza.currencies')),
-                'reference' => 'required|string|max:255',
-                'customer.email' => 'required|email',
-                'customer.name' => 'required|string|max:255',
-            ],
-            [
-                'amount.min' => 'Amount must be at least 0.5 units',
-                'currency.in' => 'Unsupported currency. Valid currencies: :values',
-                'customer.email.required' => 'Customer email is required',
-                // Add other custom messages as needed
-            ]
-        );
-
-
-
-       $response =  $this->request('post', 'transaction/initialize', $data);
-
-       $this->validateSuccessResponse($response);
-        
-       return SuccessResponse::fromArray($response);
-
-    }
-
-    public function confirmPayment(string $paymentId)
-    {
-        return $this->request('post', "payments/{$paymentId}/confirm");
-    }
-
-    public function refundPayment(string $paymentId, float $amount)
-    {
-        return $this->request('post', "payments/{$paymentId}/refund", [
-            'amount' => $amount
+        $this->validate($data, [
+            'email' => 'required|email',
+            'amount' => 'required|numeric|min:0.1',
+            'currency' => 'required|in:ILS,JOD,USD',
+            'reference' => 'nullable|string|max:255',
+            'callback_url' => 'nullable|url',
+            'metadata' => 'nullable|json',
         ]);
+
+        // Convert amount to minor units
+        $data['amount'] = (int)($data['amount'] * 100);
+
+
+
+        $response = $this->post('/transaction/initialize', $data);
+
+
+        return TransactionResponse::fromInitializationResponse($response);
     }
 
-    public function getPayment(string $paymentId)
+    public function verifyTransaction(string $reference): TransactionResponse
     {
-        return $this->request('get', "payments/{$paymentId}");
+        $response = $this->get("/transaction/verify/{$reference}");
+        return TransactionResponse::fromVerificationResponse($response);
     }
 
-    public function verifyWebhook(string $payload, string $signature)
+
+
+    public function listTransactions(array $filters = []): array
+    {
+        $validated = validator($filters, [
+            'perPage' => 'nullable|integer',
+            'page' => 'nullable|integer',
+            'status' => 'nullable|string',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+        ])->validate();
+
+        $response = $this->get('/transaction', $validated);
+        return array_map([Transaction::class, 'fromApiResponse'], $response['data']);
+    }
+
+    public function fetchTransaction(string $id): Transaction
+    {
+        $response = $this->get("/transaction/{$id}");
+        return Transaction::fromApiResponse($response);
+    }
+
+    public function chargeAuthorization(array $data): Transaction
+    {
+        $this->validate($data, [
+            'amount' => 'required|numeric',
+            'email' => 'required|email',
+            'authorization_code' => 'required|string',
+            'currency' => 'required|in:ILS,JOD,USD',
+            'reference' => 'nullable|string|max:255',
+            'queue' => 'nullable|boolean',
+        ]);
+
+        $response = $this->post('/transaction/charge_authorization', $data);
+        return Transaction::fromApiResponse($response);
+    }
+
+    public function captureTransaction(string $reference): Transaction
+    {
+        $response = $this->post("/transaction/capture/{$reference}");
+        return Transaction::fromApiResponse($response);
+    }
+
+    public function viewTransactionTimeline(string $idOrReference): array
+    {
+        return $this->get("/transaction/timeline/{$idOrReference}");
+    }
+
+    public function verifyWebhookSignature(string $payload, string $signature): bool
+    {
+        $secret = config('lahza.webhook_secret');
+        $computed = hash_hmac('sha256', $payload, $secret);
+        return hash_equals($computed, $signature);
+    }
+
+    public function fake(): self
+    {
+        $this->fake = true;
+        Http::fake();
+        return $this;
+    }
+
+    private function get(string $endpoint, array $params = [])
+    {
+        return $this->request('GET', $endpoint, $params);
+    }
+
+    private function post(string $endpoint, array $data = []): array
+    {
+        return $this->request('POST', $endpoint, $data);
+    }
+
+    private function request(string $method, string $endpoint, array $data = []): array
+    {
+        if ($this->fake) {
+            return $this->fakeResponse($method, $endpoint);
+        }
+
+        $response = $this->http->{$method}($this->baseUrl . $endpoint, $data);
+
+        if ($response->failed()) {
+            $this->handleError($response);
+        }
+
+        return $response->json();
+    }
+
+
+
+
+    /**
+     * Verify webhook signature
+     */
+    public function verifyWebhook(string $payload, string $signature): bool
     {
         $secret = config('lahza.webhook.secret');
         $computed = hash_hmac('sha256', $payload, $secret);
@@ -87,47 +159,33 @@ class LahzaGateway implements Contracts\LahzaGateway
         return hash_equals($computed, $signature);
     }
 
-    public function fake()
-    {
-        $this->fake = true;
-        Http::fake();
-        return $this;
-    }
+    /**
+     * Enable fake mode for testing
+     */
 
-    protected function request(string $method, string $endpoint, array $data = [])
-    {
-        if ($this->fake) {
-            return $this->fakeResponse($method, $endpoint);
-        }
-
-        try {
-            $response = $this->http
-                ->retry($this->retries, $this->retryDelay)
-                ->{$method}($endpoint, $data);
-
-            if ($response->failed()) {
-                $this->handleError($response);
-            }
-
-            return $response->json();
-        } catch (\Exception $e) {
-            throw new PaymentConnectionException($e->getMessage(), $e->getCode(), $e);
-        }
-    }
-
+    /**
+     * Build HTTP client
+     */
     protected function buildHttpClient(): PendingRequest
     {
         return Http::baseUrl($this->baseUrl)
             ->withHeaders([
-                // 'Authorization' => 'Bearer ' . $this->apiKey,
+                'Authorization' => 'Bearer ' . $this->apiKey,
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
             ])
-            ->withToken($this->apiKey)
             ->timeout($this->timeout);
     }
 
-    protected function validate(array $data, array $rules, $messages = [])
+    /**
+     * Make API request
+     */
+
+
+    /**
+     * Validate request data
+     */
+    protected function validate(array $data, array $rules, array $messages = []): void
     {
         $validator = Validator::make($data, $rules, $messages);
 
@@ -135,15 +193,16 @@ class LahzaGateway implements Contracts\LahzaGateway
             throw new PaymentValidationException($validator->errors());
         }
     }
+
+    /**
+     * Validate success response
+     */
     protected function validateSuccessResponse(array $response): void
     {
         $validator = Validator::make($response, [
             'status' => 'required|boolean',
             'message' => 'required|string',
             'data' => 'required|array',
-            'data.authorization_url' => 'required|url',
-            'data.access_code' => 'required|string',
-            'data.reference' => 'required|string'
         ]);
 
         if ($validator->fails()) {
@@ -154,65 +213,61 @@ class LahzaGateway implements Contracts\LahzaGateway
         }
     }
 
-    protected function handleError($response)
+    /**
+     * Handle API errors
+     */
+    protected function handleError($response): void
     {
+        $error = $response->json('error') ?? [];
         $status = $response->status();
-        $error = $response->json('error');
 
         throw new PaymentException(
-            $error['message'] ?? 'Payment processing failed',
-            $status,
-            $error['code'] ?? null
+            // Error code from API response or fallback
+            $error['code'] ?? 'payment_error',
+            // Context array with all relevant details
+            [
+                'status_code' => $status,
+                'api_message' => $error['message'] ?? 'Unknown payment error',
+                'response' => $error
+            ]
         );
     }
 
-    // In LahzaGateway.php
-
-    protected function validatePaymentRequest(array $data): void
-    {
-        $validator = Validator::make($data, [
-            'amount' => [
-                'required',
-                'numeric',
-                'min:0.01',
-                function ($attribute, $value, $fail) {
-                    if (!is_numeric($value) || $value <= 0) {
-                        $fail(ErrorCodes::getMessage('invalid_amount'));
-                    }
-                }
-            ],
-            'currency' => [
-                'required',
-                'string',
-                'size:3',
-                function ($attribute, $value, $fail) {
-                    if (!in_array(strtoupper($value), config('lahza.currencies'))) {
-                        $fail(sprintf(
-                            ErrorCodes::getMessage('currency_not_supported'),
-                            $value
-                        ));
-                    }
-                }
-            ]
-        ]);
-
-        if ($validator->fails()) {
-            $errors = $validator->errors()->all();
-            throw new PaymentException(
-                'validation_error',
-                ['errors' => $errors]
-            );
-        }
-    }
-
-    protected function fakeResponse($method, $endpoint)
+    /**
+     * Generate fake response for testing
+     */
+    protected function fakeResponse(string $method, string $endpoint): array
     {
         return [
-            'id' => 'fake_' . Str::uuid(),
-            'status' => 'succeeded',
-            'amount' => 100,
-            'currency' => 'USD',
-            'client_secret' => 'fake_secret_' . Str::random(40)
+            'status' => true,
+            'message' => 'Fake response for testing',
+            'data' => [
+                'authorization_url' => 'https://checkout.lahza.io/fake',
+                'access_code' => 'fake_access_code',
+                'reference' => 'fake_reference',
+            ],
         ];
+    }
+
+
+    /**
+     * Get the default currency set in the config
+     *
+     * @return string
+     */
+    public  function getDefaultCurrency(): string | array
+    {
+        return config('lahza.default_currency');
+    }
+
+   public function getCallbackUrl(): string | null
+    {
+        if (config('lahza.inline_callback')) {
+            return config('lahza.callback_url');
+        }
+
+        return null ;
+        
+        return config('lahza.callback_url');
     }
 }

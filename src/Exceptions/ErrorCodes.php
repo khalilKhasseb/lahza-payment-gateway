@@ -35,18 +35,66 @@ class ErrorCodes
             'message' => 'Payment could not be processed: %s',
             'type' => 'payment_error'
         ],
-       'validation_error' => [
+        'validation_error' => [
             'code' => 422,
             'message' => 'Validation failed for %d fields',
             'type' => 'validation_error'
         ],
+        'payment_error' => [
+            'code' => 500,
+            'message' => 'Payment processing failed: %api_message%',
+            'type' => 'payment_error'
+        ],
+        'invalid_request' => [
+            'code' => 400,
+            'message' => 'Invalid request: %api_message%',
+            'type' => 'invalid_request'
+        ],
+        'validation_error' => [
+            'code' => 422,
+            'message' => 'Please correct these %d issues:',
+            'type' => 'validation_error'
+        ],
+
     ];
+
 
     public static function getMessage(string $errorCode, array $context = []): string
     {
         $template = self::MAP[$errorCode]['message'] ?? 'Unknown error occurred';
-        return vsprintf($template, $context);
+        
+        return self::formatTemplate($template, $context);
     }
+
+    private static function formatTemplate(string $template, array $context): string
+    {
+        // First replace named placeholders
+        $namedReplacements = [];
+        foreach ($context as $key => $value) {
+            $namedReplacements["%{$key}%"] = $value;
+        }
+        $result = strtr($template, $namedReplacements);
+
+        // Then replace ordered placeholders
+        return vsprintf(str_replace('%d', '%s', $result), $context);
+    }
+    // public static function getMessage(string $errorCode, array $context = []): string
+    // {
+    //     $template = self::MAP[$errorCode]['message'] ?? 'Unknown error occurred';
+
+    //     // Replace named placeholders with sprintf compatible ones
+    //     $replacements = [];
+    //     foreach ($context as $key => $value) {
+    //         $replacements["%$key%"] = $value;
+    //     }
+
+    //     return strtr($template, $replacements);
+    // }
+    // public static function getMessage(string $errorCode, array $context = []): string
+    // {
+    //     $template = self::MAP[$errorCode]['message'] ?? 'Unknown error occurred';
+    //     return vsprintf($template, $context);
+    // }
 
     public static function getHttpCode(string $errorCode): int
     {
@@ -57,5 +105,4 @@ class ErrorCodes
     {
         return self::MAP[$errorCode]['type'] ?? 'unknown_error';
     }
-
 }

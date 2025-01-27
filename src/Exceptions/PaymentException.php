@@ -10,20 +10,16 @@ class PaymentException extends Exception
     protected array $context;
 
     public function __construct(
-        string $errorCode,
-        array $context = [],
+        string $errorCode,        // Error code key from ErrorCodes::MAP
+        array $context = [],      // Additional error context
         \Throwable $previous = null
     ) {
-        // $message = ErrorCodes::getMessage($errorCode, $context);
-        // $code = ErrorCodes::getHttpCode($errorCode);
-
-        parent::__construct(
-            ErrorCodes::getMessage($errorCode, $context),
-            ErrorCodes::getHttpCode($errorCode),
-            $previous
-        );
-
-        $this->errorType = ErrorCodes::MAP[$errorCode]['type'] ?? 'api_error';
+        $message = ErrorCodes::getMessage($errorCode, $context);
+        $httpCode = ErrorCodes::getHttpCode($errorCode);
+    
+        parent::__construct($message, $httpCode, $previous);
+    
+        $this->errorType = ErrorCodes::getType($errorCode);
         $this->context = $context;
     }
 
